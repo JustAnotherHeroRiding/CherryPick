@@ -1,19 +1,47 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	repoURL := "https://github.com/JustAnotherHeroRiding/CherryPick.git"
-	targetFolder := "fonts-to-copy/"
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	url := flag.String("url", "", "GitHub repository URL")
+	flag.Parse()
+
+	if *url == "" {
+		log.Fatal("Please provide a GitHub repository URL")
+	}
+
+	var repoURL, branch, targetFolder string
+	re := regexp.MustCompile(`^https:\/\/github\.com\/([^\/]+)\/([^\/]+)(?:\/tree\/([^\/]+))?\/?(.*)`)
+	matches := re.FindStringSubmatch(*url)
+	fmt.Println("Found Matches: ", matches)
+
+	if len(matches) < 5 {
+		log.Fatalf("Invalid URL format: %s", *url)
+	}
+
+	repoURL = fmt.Sprintf("https://github.com/%s/%s", matches[1], matches[2])
+	fmt.Printf("Attempting to clone: %s\n", repoURL)
+
+	branch = matches[3]
+	targetFolder = matches[4]
 	destinationFolder := "cherrypicked"
 
 	// Clone the repository to a temporary directory (non-bare)
@@ -24,9 +52,22 @@ func main() {
 	}
 	defer os.RemoveAll(tmpDir) // Clean up after
 
-	repo, err := git.PlainClone(tmpDir, false, &git.CloneOptions{
-		URL: repoURL,
-	})
+	token := os.Getenv("GITHUB_TOKEN")
+	username := os.Getenv("GITHUB_USERNAME")
+
+	auth := &http.BasicAuth{
+		Username: username,
+		Password: token,
+	}
+
+	options := &git.CloneOptions{
+		URL:      repoURL + ".git",
+		Auth:     auth,
+		Progress: os.Stdout,
+	}
+
+	repo, err := git.PlainClone(tmpDir, false, options)
+
 	if err != nil {
 		fmt.Println("Error cloning repo:", err)
 		return
@@ -41,7 +82,7 @@ func main() {
 
 	// Checkout the desired branch (if it's not main, modify this line)
 	err = worktree.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName("main"),
+		Branch: plumbing.NewBranchReferenceName(branch),
 	})
 	if err != nil {
 		fmt.Println("Error checking out branch:", err)
