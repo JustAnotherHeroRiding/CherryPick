@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -17,6 +19,8 @@ import (
 )
 
 func main() {
+	startTime := time.Now() // Start the timer
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -44,116 +48,102 @@ func main() {
 	targetFolder = matches[4]
 	destinationFolder := "cherrypicked"
 
-	// Create a temporary directory to clone the repo
 	tmpDir, err := os.MkdirTemp("", "repo")
 	if err != nil {
-		fmt.Println("Error creating temp directory:", err)
-		return
+		log.Fatal("Error creating temp directory:", err)
 	}
 	defer os.RemoveAll(tmpDir) // Clean up after
 
-	token := os.Getenv("GITHUB_TOKEN")
-	username := os.Getenv("GITHUB_USERNAME")
-
 	auth := &http.BasicAuth{
-		Username: username,
-		Password: token,
+		Username: os.Getenv("GITHUB_USERNAME"),
+		Password: os.Getenv("GITHUB_TOKEN"),
 	}
 
-	// Clone the repository with the sparse-checkout option
 	options := &git.CloneOptions{
 		URL:        repoURL + ".git",
 		Auth:       auth,
-		NoCheckout: true, // Do not checkout immediately
-		Progress:   os.Stdout,
-		Depth:      1, // Fetch only the latest commit
+		NoCheckout: true,
+		Depth:      1,
 	}
 
 	repo, err := git.PlainClone(tmpDir, false, options)
 	if err != nil {
-		fmt.Println("Error cloning repo:", err)
-		return
+		log.Fatal("Error cloning repo:", err)
 	}
 
 	// Configure sparse checkout
 	sparseDir := filepath.Join(tmpDir, ".git", "info")
 	if err := os.MkdirAll(sparseDir, os.ModePerm); err != nil {
-		fmt.Println("Error creating sparse-checkout directory:", err)
-		return
+		log.Fatal("Error creating sparse-checkout directory:", err)
 	}
 
 	sparseFilePath := filepath.Join(sparseDir, "sparse-checkout")
 	if err := os.WriteFile(sparseFilePath, []byte(targetFolder+"\n"), 0644); err != nil {
-		fmt.Println("Error writing sparse-checkout file:", err)
-		return
+		log.Fatal("Error writing sparse-checkout file:", err)
 	}
 
-	// Enable sparse checkout
 	worktree, err := repo.Worktree()
 	if err != nil {
-		fmt.Println("Error getting worktree:", err)
-		return
+		log.Fatal("Error getting worktree:", err)
 	}
 
-	// Checkout the desired branch with sparse checkout
 	err = worktree.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(branch),
 	})
 	if err != nil {
-		fmt.Println("Error checking out branch:", err)
-		return
+		log.Fatal("Error checking out branch:", err)
 	}
 
-	// Get the head commit
 	headRef, err := repo.Head()
 	if err != nil {
-		fmt.Println("Error getting head reference:", err)
-		return
+		log.Fatal("Error getting head reference:", err)
 	}
 
-	// Get the commit object
 	commit, err := repo.CommitObject(headRef.Hash())
 	if err != nil {
-		fmt.Println("Error getting commit object:", err)
-		return
+		log.Fatal("Error getting commit object:", err)
 	}
 
-	// Get the tree from the commit
 	tree, err := commit.Tree()
 	if err != nil {
-		fmt.Println("Error getting tree:", err)
-		return
+		log.Fatal("Error getting tree:", err)
 	}
 
-	// Traverse the tree to find files inside the target folder
+	var wg sync.WaitGroup
 	tree.Files().ForEach(func(f *object.File) error {
 		if strings.HasPrefix(filepath.Clean(f.Name), filepath.Clean(targetFolder)) {
-			fmt.Println("Copying:", f.Name)
-
-			// Read the file content
-			content, err := f.Contents()
-			if err != nil {
-				return err
-			}
-
-			// Build the destination file path
-			relativePath := f.Name[len(targetFolder):] // Remove target folder prefix
-			destinationPath := filepath.Join(destinationFolder, relativePath)
-
-			// Ensure the destination folder exists
-			err = os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm)
-			if err != nil {
-				return err
-			}
-
-			// Write the file content to the new folder
-			err = os.WriteFile(destinationPath, []byte(content), 0644)
-			if err != nil {
-				return err
-			}
+			wg.Add(1)
+			go func(file *object.File) {
+				defer wg.Done()
+				fmt.Println("Copying:", file.Name)
+				if err := copyFile(file, destinationFolder, targetFolder); err != nil {
+					log.Println("Error copying file:", err)
+				}
+			}(f)
 		}
 		return nil
 	})
 
-	fmt.Println("Files copied to:", destinationFolder)
+	wg.Wait()
+	elapsedTime := time.Since(startTime) // Stop the timer
+
+	fmt.Printf("Files copied to: %s\n", destinationFolder)
+	fmt.Printf("Time taken to download the target folder: %s\n", elapsedTime)
+
+}
+
+func copyFile(f *object.File, destinationFolder, targetFolder string) error {
+	content, err := f.Contents()
+	if err != nil {
+		return err
+	}
+
+	relativePath := f.Name[len(targetFolder):]
+	destinationPath := filepath.Join(destinationFolder, relativePath)
+
+	if err := os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm); err != nil {
+		return err
+	}
+
+	return os.WriteFile(destinationPath, []byte(content), 0644)
 }
