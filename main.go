@@ -44,7 +44,7 @@ func main() {
 	targetFolder = matches[4]
 	destinationFolder := "cherrypicked"
 
-	// Clone the repository to a temporary directory (non-bare)
+	// Create a temporary directory to clone the repo
 	tmpDir, err := os.MkdirTemp("", "repo")
 	if err != nil {
 		fmt.Println("Error creating temp directory:", err)
@@ -60,27 +60,42 @@ func main() {
 		Password: token,
 	}
 
+	// Clone the repository with the sparse-checkout option
 	options := &git.CloneOptions{
-		URL:      repoURL + ".git",
-		Auth:     auth,
-		Progress: os.Stdout,
+		URL:        repoURL + ".git",
+		Auth:       auth,
+		NoCheckout: true, // Do not checkout immediately
+		Progress:   os.Stdout,
+		Depth:      1, // Fetch only the latest commit
 	}
 
 	repo, err := git.PlainClone(tmpDir, false, options)
-
 	if err != nil {
 		fmt.Println("Error cloning repo:", err)
 		return
 	}
 
-	// Get the working tree from the repository
+	// Configure sparse checkout
+	sparseDir := filepath.Join(tmpDir, ".git", "info")
+	if err := os.MkdirAll(sparseDir, os.ModePerm); err != nil {
+		fmt.Println("Error creating sparse-checkout directory:", err)
+		return
+	}
+
+	sparseFilePath := filepath.Join(sparseDir, "sparse-checkout")
+	if err := os.WriteFile(sparseFilePath, []byte(targetFolder+"\n"), 0644); err != nil {
+		fmt.Println("Error writing sparse-checkout file:", err)
+		return
+	}
+
+	// Enable sparse checkout
 	worktree, err := repo.Worktree()
 	if err != nil {
 		fmt.Println("Error getting worktree:", err)
 		return
 	}
 
-	// Checkout the desired branch (if it's not main, modify this line)
+	// Checkout the desired branch with sparse checkout
 	err = worktree.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(branch),
 	})
@@ -112,7 +127,6 @@ func main() {
 
 	// Traverse the tree to find files inside the target folder
 	tree.Files().ForEach(func(f *object.File) error {
-		// Check if the file is within the target folder
 		if strings.HasPrefix(filepath.Clean(f.Name), filepath.Clean(targetFolder)) {
 			fmt.Println("Copying:", f.Name)
 
