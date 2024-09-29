@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// Define the repository URL and directory to clone
-	repoURL := "https://github.com/<username>/<repository>.git"
+	repoURL := "https://github.com/JustAnotherHeroRiding/CherryPick.git"
 	directory := "./cloned-repo"
 
 	// Clone the repository into the specified directory
