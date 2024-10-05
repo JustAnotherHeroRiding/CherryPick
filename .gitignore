@@ -1,3 +1,4 @@
 cherrypicked/*
 .env
 yarn.lock
+download-directory/*
