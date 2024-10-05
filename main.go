@@ -1,149 +1,134 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
-	"time"
 
-	git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/joho/godotenv"
 )
 
-func main() {
-	startTime := time.Now() // Start the timer
+type FileResponse struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"` // "file" or "dir"
+	URL  string `json:"download_url"`
+}
 
+func fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder string) {
+	client := &http.Client{}
+
+	if err := os.MkdirAll(destinationFolder, os.ModePerm); err != nil {
+		log.Fatalf("Failed to create destination folder: %v", err)
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s?ref=%s", user, repo, targetFolder, branch)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(os.Getenv("GITHUB_USERNAME"), os.Getenv("GITHUB_TOKEN"))
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to list files: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		log.Fatalf("Failed to fetch files: %s", response.Status)
+	}
+
+	var files []FileResponse
+	if err := json.NewDecoder(response.Body).Decode(&files); err != nil {
+		log.Fatalf("Failed to decode response: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for _, file := range files {
+		wg.Add(1)
+		go func(file FileResponse) {
+			defer wg.Done()
+			if file.Type == "file" {
+				fetchFile(user, repo, branch, file.Path, destinationFolder)
+			} else if file.Type == "dir" {
+				subDirDestination := filepath.Join(destinationFolder, file.Name)
+				fetchDirectoryContents(user, repo, branch, file.Path, subDirDestination)
+			}
+		}(file)
+	}
+
+	wg.Wait()
+}
+
+func fetchFile(user, repo, branch, path, destinationFolder string) {
+	client := &http.Client{}
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", user, repo, branch, path)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(os.Getenv("GITHUB_USERNAME"), os.Getenv("GITHUB_TOKEN"))
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to fetch file %s: %v", path, err)
+		return
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		log.Printf("Failed to fetch file %s: %s", path, response.Status)
+		return
+	}
+
+	destinationPath := filepath.Join(destinationFolder, path) // Determine full destination path
+	if err := os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm); err != nil {
+		log.Printf("Failed to create directory for file %s: %v", path, err)
+		return
+	}
+
+	file, err := os.Create(destinationPath)
+	if err != nil {
+		log.Printf("Failed to create file %s: %v", destinationPath, err)
+		return
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(file, response.Body); err != nil {
+		log.Printf("Failed to write file %s: %v", destinationPath, err)
+		return
+	}
+
+	log.Printf("Downloaded: %s", destinationPath)
+}
+
+func main() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	url := flag.String("url", "", "GitHub repository URL")
+	var url string
+	flag.StringVar(&url, "url", "", "GitHub URL to download")
 	flag.Parse()
 
-	if *url == "" {
-		log.Fatal("Please provide a GitHub repository URL")
+	if url == "" {
+		log.Fatal("Please provide a GitHub URL using the -url flag")
 	}
 
-	var repoURL, branch, targetFolder string
-	re := regexp.MustCompile(`^https:\/\/github\.com\/([^\/]+)\/([^\/]+)(?:\/tree\/([^\/]+))?\/?(.*)`)
-	matches := re.FindStringSubmatch(*url)
-	fmt.Println("Found Matches: ", matches)
-
-	if len(matches) < 5 {
-		log.Fatalf("Invalid URL format: %s", *url)
+	// Parse the URL to extract user, repo, branch, and path
+	parts := strings.Split(url, "/")
+	if len(parts) < 5 || parts[3] == "" || parts[4] == "" {
+		log.Fatal("Invalid URL format. Expected format: https://github.com/user/repo/tree/branch/path")
 	}
 
-	repoURL = fmt.Sprintf("https://github.com/%s/%s", matches[1], matches[2])
-	fmt.Printf("Attempting to clone: %s\n", repoURL)
+	user := parts[3]
+	repo := parts[4]
+	branch := parts[6]                           // Assume the branch is always the 7th part in the URL
+	targetFolder := strings.Join(parts[7:], "/") // The rest is the folder path
 
-	branch = matches[3]
-	targetFolder = matches[4]
-	destinationFolder := "cherrypicked"
+	destinationFolder := "cherrypicked" // You can modify this as needed
 
-	tmpDir, err := os.MkdirTemp("", "repo")
-	if err != nil {
-		log.Fatal("Error creating temp directory:", err)
-	}
-	defer os.RemoveAll(tmpDir) // Clean up after
-
-	auth := &http.BasicAuth{
-		Username: os.Getenv("GITHUB_USERNAME"),
-		Password: os.Getenv("GITHUB_TOKEN"),
-	}
-
-	options := &git.CloneOptions{
-		URL:        repoURL + ".git",
-		Auth:       auth,
-		NoCheckout: true,
-		Depth:      1,
-	}
-
-	repo, err := git.PlainClone(tmpDir, false, options)
-	if err != nil {
-		log.Fatal("Error cloning repo:", err)
-	}
-
-	// Configure sparse checkout
-	sparseDir := filepath.Join(tmpDir, ".git", "info")
-	if err := os.MkdirAll(sparseDir, os.ModePerm); err != nil {
-		log.Fatal("Error creating sparse-checkout directory:", err)
-	}
-
-	sparseFilePath := filepath.Join(sparseDir, "sparse-checkout")
-	if err := os.WriteFile(sparseFilePath, []byte(targetFolder+"\n"), 0644); err != nil {
-		log.Fatal("Error writing sparse-checkout file:", err)
-	}
-
-	worktree, err := repo.Worktree()
-	if err != nil {
-		log.Fatal("Error getting worktree:", err)
-	}
-
-	err = worktree.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(branch),
-	})
-	if err != nil {
-		log.Fatal("Error checking out branch:", err)
-	}
-
-	headRef, err := repo.Head()
-	if err != nil {
-		log.Fatal("Error getting head reference:", err)
-	}
-
-	commit, err := repo.CommitObject(headRef.Hash())
-	if err != nil {
-		log.Fatal("Error getting commit object:", err)
-	}
-
-	tree, err := commit.Tree()
-	if err != nil {
-		log.Fatal("Error getting tree:", err)
-	}
-
-	var wg sync.WaitGroup
-	tree.Files().ForEach(func(f *object.File) error {
-		if strings.HasPrefix(filepath.Clean(f.Name), filepath.Clean(targetFolder)) {
-			wg.Add(1)
-			go func(file *object.File) {
-				defer wg.Done()
-				fmt.Println("Copying:", file.Name)
-				if err := copyFile(file, destinationFolder, targetFolder); err != nil {
-					log.Println("Error copying file:", err)
-				}
-			}(f)
-		}
-		return nil
-	})
-
-	wg.Wait()
-	elapsedTime := time.Since(startTime) // Stop the timer
-
-	fmt.Printf("Files copied to: %s\n", destinationFolder)
-	fmt.Printf("Time taken to download the target folder: %s\n", elapsedTime)
-
-}
-
-func copyFile(f *object.File, destinationFolder, targetFolder string) error {
-	content, err := f.Contents()
-	if err != nil {
-		return err
-	}
-
-	relativePath := f.Name[len(targetFolder):]
-	destinationPath := filepath.Join(destinationFolder, relativePath)
-
-	if err := os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm); err != nil {
-		return err
-	}
-
-	return os.WriteFile(destinationPath, []byte(content), 0644)
+	fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
 }
