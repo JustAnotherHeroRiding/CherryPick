@@ -83,8 +83,11 @@ func fetchFile(user, repo, branch, path, destinationFolder string) {
 		return
 	}
 
-	destinationPath := filepath.Join(destinationFolder, path) // Determine full destination path
-	if err := os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm); err != nil {
+	// Extract the filename from the path
+	fileName := filepath.Base(path)
+	destinationPath := filepath.Join(destinationFolder, fileName) // Use only the filename for destination
+
+	if err := os.MkdirAll(destinationFolder, os.ModePerm); err != nil {
 		log.Printf("Failed to create directory for file %s: %v", path, err)
 		return
 	}
