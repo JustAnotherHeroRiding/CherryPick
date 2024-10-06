@@ -1,5 +1,7 @@
 # CherryPick
 
+![[logo.png]]
+
 ## What is this?
 
 Have you ever needed to download a single folder from a GitHub repository, only to find out there's no straightforward way to do it on GitHub.com? I found myself going down a rabbit hole trying multiple extensions that either didn't work, only allowed file downloads (when I needed a fonts folder), or led to convoluted Stack Overflow threads with long-winded answers that I didn't want to follow for something as simple as this.
