@@ -1,6 +1,6 @@
 # CherryPick
 
-![[logo.png]]
+<img alt="Cherries" height="280" src="logo.png" />
 
 ## What is this?
 
