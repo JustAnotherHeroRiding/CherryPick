@@ -14,6 +14,8 @@ To use CherryPick, you need to have **Go** installed on your machine. You can do
 
 ## How to Use
 
+IMPORTANT: The example repo used below is private and will not work for you. Make sure to replace the url with a repo you have access to or a public one.
+
 1. Clone the repository by running:
     
     `git clone https://github.com/JustAnotherHeroRiding/CherryPick.git`
