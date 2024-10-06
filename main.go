@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"golang.org/x/sync/semaphore"
 )
 
 type FileResponse struct {
@@ -36,16 +38,10 @@ func main() {
 
 	url := os.Args[1] // First argument after `go run main.go`
 
-	// Parse the URL to extract user, repo, branch, and path
-	parts := strings.Split(url, "/")
-	if len(parts) < 5 || parts[3] == "" || parts[4] == "" {
-		log.Fatal("Invalid URL format. Expected format: https://github.com/user/repo/tree/branch/path")
+	user, repo, branch, targetFolder, err := parseGitHubURL(url)
+	if err != nil {
+		log.Fatalf("Error parsing URL: %v", err)
 	}
-
-	user := parts[3]
-	repo := parts[4]
-	branch := parts[6]                           // Assume the branch is always the 7th part in the URL
-	targetFolder := strings.Join(parts[7:], "/") // The rest is the folder path
 
 	destinationFolder := "cherrypicked" // You can modify this as needed
 
@@ -54,6 +50,27 @@ func main() {
 	elapsedTime := time.Since(startTime)
 
 	fmt.Printf("Time taken to download the directory: %s\n", elapsedTime)
+}
+
+func parseGitHubURL(url string) (user, repo, branch, targetFolder string, err error) {
+	parts := strings.Split(url, "/")
+	if len(parts) < 5 {
+		return "", "", "", "", fmt.Errorf("invalid URL format. Expected format: https://github.com/user/repo")
+	}
+
+	user = parts[3]
+	repo = parts[4]
+
+	// Handle optional branch and targetFolder paths
+	if len(parts) >= 7 && parts[5] == "tree" {
+		branch = parts[6]
+		targetFolder = strings.Join(parts[7:], "/")
+	} else {
+		branch = "main" // Default to main
+		targetFolder = strings.Join(parts[5:], "/")
+	}
+
+	return user, repo, branch, targetFolder, nil
 }
 
 func fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder string) {
@@ -74,7 +91,7 @@ func fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder 
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		log.Fatalf("Failed to fetch files: %s", response.Status)
+		log.Fatalf("Failed to fetch files: %s. \nIf this is a private repository enter a token that has access to it.", response.Status)
 	}
 
 	var files []FileResponse
@@ -83,10 +100,17 @@ func fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder 
 	}
 
 	var wg sync.WaitGroup
+	sem := semaphore.NewWeighted(50) // Limit concurrent downloads to 50
+
 	for _, file := range files {
 		wg.Add(1)
 		go func(file FileResponse) {
 			defer wg.Done()
+			if err := sem.Acquire(context.Background(), 1); err != nil {
+				log.Printf("Failed to acquire semaphore: %v", err)
+				return
+			}
+			defer sem.Release(1)
 			if file.Type == "file" {
 				fetchFile(user, repo, branch, file.Path, destinationFolder)
 			} else if file.Type == "dir" {
