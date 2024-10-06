@@ -22,9 +22,15 @@ To use CherryPick, you need to have **Go** installed on your machine. You can do
     
 3. Run the following command, replacing the URL with a direct link to the folder you want to download. For example, to download the fonts folder contained in the assets directory, you would run:
     
-    go run main.go [https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts](https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts)
+    `go run main.go [https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts](https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts)`
     
 4. Once the download is complete, you will find the contents of that folder in a directory named **`cherrypicked`**, which is created automatically in the project folder.
+
+### Downloading multiple directories or files
+
+Provide a comma separated list of directory or file URLs and all of them will be downloaded into the target directory.
+
+    go run main.go https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts,https://github.com/KristijanKocev/stipsa/tree/main/assets/images
     
 
 ## GitHub Token
@@ -37,20 +43,21 @@ To do this:
     
 2. Set the following two required environment variables in your .env file:
     
-    GITHUB_USERNAME=your_username GITHUB_TOKEN=your_token
-    
+    `GITHUB_USERNAME=your_username GITHUB_TOKEN=your_token`
+
+### Changing download target directory
+
+To change the default location, change the destination_folder in config.yaml with your target.
+For example:
+    `destination_folder: "~/Downloads"`
+
 
 ## TODO
 
-- [ ]  Accept multiple folders
-- [ ]  Add a progress indicator
-- [ ]  Accept single files
-- [ ]  Accept multiple files
-- [ ]  Test with private repositories
-
-## Optimization
-
-Currently, the download process can feel slow when the target repository is large or when the network speed is not optimal. I aim to make this tool as fast as possible, so any tips for optimizing Go performance or pull requests are greatly appreciated!
+- [x] Accept multiple folders
+- [x] Accept single files
+- [x] Accept multiple files
+- [x] Private repositories(with a token that can access them)
 
 ## Contribution
 
