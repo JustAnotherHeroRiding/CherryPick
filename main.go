@@ -15,6 +15,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 )
 
 type FileResponse struct {
@@ -23,40 +24,68 @@ type FileResponse struct {
 	Type string `json:"type"` // "file" or "dir"
 	URL  string `json:"download_url"`
 }
+type Config struct {
+	DestinationFolder string `yaml:"destination_folder"`
+}
 
 func main() {
-
 	startTime := time.Now()
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	// Get the URL from the command-line arguments
-	if len(os.Args) < 2 {
-		log.Fatal("Please provide a GitHub URL as an argument")
+
+	// Load configuration
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("Error loading config file: %v", err)
 	}
 
-	url := os.Args[1] // First argument after `go run main.go`
+	// Get the URLs from the command-line arguments
+	if len(os.Args) < 2 {
+		log.Fatal("Please provide GitHub URLs as arguments")
+	}
 
-	// Declare variables to hold user, repo, branch, and targetFolder
-	var user, repo, branch, targetFolder string
+	// Split the URLs by comma
+	urls := strings.Split(os.Args[1], ",")
 
-	// Check if the URL points to a file or a directory
-	if strings.Contains(url, "/blob/") {
-		fetchFileFromURL(url)
-	} else {
-		var err error
-		user, repo, branch, targetFolder, err = parseGitHubURL(url) // Assign values
-		if err != nil {
-			log.Fatalf("Error parsing URL: %v", err)
+	for _, url := range urls {
+		println("Getting", url)
+		// Declare variables to hold user, repo, branch, and targetFolder
+		var user, repo, branch, targetFolder string
+
+		// Check if the URL points to a file or a directory
+		if strings.Contains(url, "/blob/") {
+			fetchFileFromURL(url)
+		} else {
+			var err error
+			user, repo, branch, targetFolder, err = parseGitHubURL(url) // Assign values
+			if err != nil {
+				log.Fatalf("Error parsing URL '%s': %v", url, err)
+			}
+
+			destinationFolder := config.DestinationFolder
+			fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
 		}
-
-		destinationFolder := "cherrypicked" // You can modify this as needed
-		fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
 	}
 
 	elapsedTime := time.Since(startTime)
-	fmt.Printf("Time taken to download the directory: %s\n", elapsedTime)
+	fmt.Printf("Time taken to download the directories: %s\n", elapsedTime)
+}
+
+func loadConfig(filename string) (*Config, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var config Config
+	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
 }
 
 func parseGitHubURL(url string) (user, repo, branch, targetFolder string, err error) {
