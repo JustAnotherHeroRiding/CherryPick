@@ -1,6 +1,7 @@
 # CherryPick
-
+<div justify="center" align="center">
 <img alt="Cherries" height="280" src="logo.png" />
+</div>
 
 ## What is this?
 
