@@ -22,7 +22,7 @@ To use CherryPick, you need to have **Go** installed on your machine. You can do
     
 3. Run the following command, replacing the URL with a direct link to the folder you want to download. For example, to download the fonts folder contained in the assets directory, you would run:
     
-    go run main.go -url="[https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts](https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts)"
+    go run main.go [https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts](https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts)
     
 4. Once the download is complete, you will find the contents of that folder in a directory named **`cherrypicked`**, which is created automatically in the project folder.
     
