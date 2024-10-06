@@ -38,17 +38,24 @@ func main() {
 
 	url := os.Args[1] // First argument after `go run main.go`
 
-	user, repo, branch, targetFolder, err := parseGitHubURL(url)
-	if err != nil {
-		log.Fatalf("Error parsing URL: %v", err)
+	// Declare variables to hold user, repo, branch, and targetFolder
+	var user, repo, branch, targetFolder string
+
+	// Check if the URL points to a file or a directory
+	if strings.Contains(url, "/blob/") {
+		fetchFileFromURL(url)
+	} else {
+		var err error
+		user, repo, branch, targetFolder, err = parseGitHubURL(url) // Assign values
+		if err != nil {
+			log.Fatalf("Error parsing URL: %v", err)
+		}
+
+		destinationFolder := "cherrypicked" // You can modify this as needed
+		fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
 	}
 
-	destinationFolder := "cherrypicked" // You can modify this as needed
-
-	fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
-
 	elapsedTime := time.Since(startTime)
-
 	fmt.Printf("Time taken to download the directory: %s\n", elapsedTime)
 }
 
@@ -163,4 +170,18 @@ func fetchFile(user, repo, branch, path, destinationFolder string) {
 	}
 
 	log.Printf("Downloaded: %s", destinationPath)
+}
+
+func fetchFileFromURL(fileURL string) {
+	parts := strings.Split(fileURL, "/")
+	if len(parts) < 5 {
+		log.Fatal("Invalid file URL format.")
+	}
+	user := parts[3]
+	repo := parts[4]
+	branch := "main" // Default to main if not specified
+	filePath := strings.Join(parts[7:], "/")
+
+	destinationFolder := "cherrypicked" // Specify destination folder
+	fetchFile(user, repo, branch, filePath, destinationFolder)
 }
