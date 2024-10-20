@@ -15,7 +15,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"golang.org/x/sync/semaphore"
-	"gopkg.in/yaml.v3"
 )
 
 type FileResponse struct {
@@ -23,9 +22,6 @@ type FileResponse struct {
 	Path string `json:"path"`
 	Type string `json:"type"` // "file" or "dir"
 	URL  string `json:"download_url"`
-}
-type Config struct {
-	DestinationFolder string `yaml:"destination_folder"`
 }
 
 func main() {
@@ -35,10 +31,10 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Load configuration
-	config, err := loadConfig("config.yaml")
-	if err != nil {
-		log.Fatalf("Error loading config file: %v", err)
+	// Get the destination folder from the environment variable
+	destinationFolder := os.Getenv("CHERRYPICK_DOWNLOAD_DIR")
+	if destinationFolder == "" {
+		log.Fatal("CHERRYPICK_DOWNLOAD_DIR environment variable is not set")
 	}
 
 	// Get the URLs from the command-line arguments
@@ -64,28 +60,12 @@ func main() {
 				log.Fatalf("Error parsing URL '%s': %v", url, err)
 			}
 
-			destinationFolder := config.DestinationFolder
 			fetchDirectoryContents(user, repo, branch, targetFolder, destinationFolder)
 		}
 	}
 
 	elapsedTime := time.Since(startTime)
 	fmt.Printf("Time taken to download the directories: %s\n", elapsedTime)
-}
-
-func loadConfig(filename string) (*Config, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var config Config
-	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
 }
 
 func parseGitHubURL(url string) (user, repo, branch, targetFolder string, err error) {
