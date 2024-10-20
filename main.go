@@ -34,7 +34,13 @@ func main() {
 	// Get the destination folder from the environment variable
 	destinationFolder := os.Getenv("CHERRYPICK_DOWNLOAD_DIR")
 	if destinationFolder == "" {
-		log.Fatal("CHERRYPICK_DOWNLOAD_DIR environment variable is not set")
+		destinationFolder = "cherrypicked" // Set default folder name
+	}
+
+	// Ensure the destination folder exists
+	err = os.MkdirAll(destinationFolder, os.ModePerm)
+	if err != nil {
+		log.Fatalf("Failed to create destination folder: %v", err)
 	}
 
 	// Get the URLs from the command-line arguments
