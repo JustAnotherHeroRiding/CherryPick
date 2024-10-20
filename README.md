@@ -31,6 +31,22 @@ IMPORTANT: The example repo used below is private and will not work for you. Mak
     
 4. Once the download is complete, you will find the contents of that folder in a directory named **`cherrypicked`**, which is created automatically in the project folder.
 
+#### Install using Go
+
+1. Install the repository
+    `go install github.com/JustAnotherHeroRiding/cherrypick`
+
+2.Set your environmental variables
+    `export GITHUB_USERNAME=YourUsername`
+    `export GITHUB_TOKEN=YourGithubToken` 
+    `export CHERRYPICK_DOWNLOAD_DIR=YOUR_DOWNLOAD_DIR
+3. Download your chosen directory
+    `cherrypick https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts`
+This will create a new directory called cherrypicked with your target directories and/or files.
+It will be located in the same directory where you ran the command.
+
+NOTE: You must add the Go binary to your PATH in your shell config for cherrypick to work.
+
 ### Downloading multiple directories or files
 
 Provide a comma separated list of directory or file URLs and all of them will be downloaded into the target directory.
@@ -53,9 +69,9 @@ To do this:
 
 ### Changing download target directory
 
-To change the default location, change the destination_folder in config.yaml with your target.
+To change the default location, change set the environmental variable to your desired location.
 For example:
-    `destination_folder: "~/Downloads"`
+    `export CHERRYPICK_DOWNLOAD_DIR=/desired/download/path`
 
 
 ## TODO
