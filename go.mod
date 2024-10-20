@@ -1,4 +1,4 @@
-module example.com/CherryPick
+module github.com/JustAnotherHeroRiding/cherrypick
 
 go 1.23.1
 
