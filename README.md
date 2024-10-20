@@ -1,4 +1,4 @@
-# CherryPick
+ # CherryPick
 <div justify="center" align="center">
 <img alt="Cherries" height="280" src="logo.png" />
 </div>
@@ -39,9 +39,11 @@ IMPORTANT: The example repo used below is private and will not work for you. Mak
 2.Set your environmental variables
     `export GITHUB_USERNAME=YourUsername`
     `export GITHUB_TOKEN=YourGithubToken` 
-    `export CHERRYPICK_DOWNLOAD_DIR=YOUR_DOWNLOAD_DIR
+    `export CHERRYPICK_DOWNLOAD_DIR=YOUR_DOWNLOAD_DIR`
+    
 3. Download your chosen directory
     `cherrypick https://github.com/KristijanKocev/stipsa/tree/main/assets/fonts`
+   
 This will create a new directory called cherrypicked with your target directories and/or files.
 It will be located in the same directory where you ran the command.
 
